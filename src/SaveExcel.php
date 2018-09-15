@@ -106,9 +106,10 @@ class SaveExcel extends Component
         if (!$this->models) {
             throw new Exception('属性models,不能为空');
         }
+        $this->initFields();
+
         $this->checkFields();
         $this->getRelationModels();
-        $this->initFields();
         $this->initHeaderData();
         $this->initBodyData();
         $this->arrayToExcel();
