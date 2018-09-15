@@ -3,6 +3,7 @@ yii2,excel
 Yii2  excel 导入，导出扩展，
 本扩展基于phpexcel的升级版本 [phpspreadsheet](http://github.com/phpoffice/phpspreadsheet).
 主要有以下功能：
+
 ##导出
 - 基于activeDataPrivoder生成Excel
 - 基于ActiveRecrod生成Excel
@@ -11,6 +12,7 @@ Yii2  excel 导入，导出扩展，
 - 指定导出字段
 - 支持导出model的关联数据
 - 自定义输出版本
+
 ##导入
 - 直接生成ActiveRecrod的模型
 - 按表头生成数组
