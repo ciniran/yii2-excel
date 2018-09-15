@@ -4,7 +4,7 @@ Yii2  excel 导入，导出扩展，
 本扩展基于phpexcel的升级版本 [phpspreadsheet](http://github.com/phpoffice/phpspreadsheet).
 主要有以下功能：
 
-##导出
+## 导出
 - 基于activeDataPrivoder生成Excel
 - 基于ActiveRecrod生成Excel
 - 基于二维数组生成Excel
@@ -13,22 +13,21 @@ Yii2  excel 导入，导出扩展，
 - 支持导出model的关联数据
 - 自定义输出版本
 
-##导入
+## 导入
 - 直接生成ActiveRecrod的模型
 - 按表头生成数组
 - 指定表头位置
 - 可按模型attribute导入
 - 按attributeLabel中文导入
 
-
-安装
+## 安装
 ------------
 
 您可以通过 [composer](http://getcomposer.org/download/) 安装.
 
 本项目在github的地址是[http://github.com/ciniran/yii2-excel](http://github.com/ciniran/yii2-excel)
 
-运行
+## 运行
 
 ```
 php composer.phar require --prefer-dist ciniran/yii2-excel "*"
@@ -43,7 +42,7 @@ or add
 to the require section of your `composer.json` file.
 
 
-用法
+## 用法
 -----
 
 下面是一些简单示例：
