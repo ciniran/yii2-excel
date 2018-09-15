@@ -1,7 +1,7 @@
 <?php
 /**
  * Created by PhpStorm.
- * User: boxie
+ * User: xiebo
  * Date: 2018/9/15
  * Time: 上午9:31
  */
@@ -10,17 +10,51 @@ namespace ciniran\excel;
 
 
 use Exception;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xls;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use yii\base\Component;
 use yii\base\Model;
 use yii\data\ActiveDataProvider;
 use yii\db\ActiveRecord;
 
-class Excel extends Component
+class SaveExcel extends Component
 {
-    public $fields = [];
+    /**
+     * excel97格式
+     */
+    const XLS = 'xls';
+    /**
+     * excel2001格式
+     */
+    const XLXS = 'xlsx';
+    /**
+     * @var array|string $fields 需要输出的列
+     */
+    public $fields;
+    /**
+     * @var array $relation 需要输出的关联数据
+     */
     public $relation = [];
-    public $show = true;
-    public $fileName = "";
+    /**
+     * @var bool $show 内容值转换
+     * 如果需要对输出到excel表格的值进行转换
+     * 在输出模型中定义一个名称为show的function即可
+     */
+    public $show = false;
+    /**
+     * @var string $fileName 指定输出名称,默认为当前时间值
+     */
+    public $fileName;
+    /**
+     * @var self::XLS | self::XLXS 指定输出格式
+     */
+    public $format;
+    /**
+     * @var array $array 需要输出的数组
+     */
+    public $array;
+
     /**
      * @var ActiveRecord[] $models 要导出的模型数据
      */
@@ -29,117 +63,106 @@ class Excel extends Component
      * @var ActiveDataProvider $dataProvider
      */
     public $dataProvider;
+    /**
+     * @var bool $all 导出全部数据
+     */
     public $all = true;
-
-    private $headerDataArray;
+    /**
+     * @var array $headerDataArray 列名数据
+     */
+    public $headerDataArray;
     private $bodyDataArray;
 
 
     public function init()
     {
+        if (!$this->models && !$this->dataProvider && !$this->array) {
+            throw new Exception('models,dataProvider,array,必需指定一个');
+        }
         parent::init();
     }
 
     /**
-     * @param ActiveDataProvider $dataProvider
-     * @param                    $fileName
-     * @param array              $fields
-     * @param string             $relation 导出关联明细
-     * @param bool               $show     是否显示值对应的文本
+     * 通过dataProvider生成excel文件
      * @throws Exception
      */
     public function dataProviderToExcel()
     {
-        $this->initModels();
-
-    }
-
-    /**
-     * 下载表格
-     * @param      $headData
-     * @param      $bodyData
-     * @param null $fileName
-     * @throws \PHPExcel_Exception
-     * @throws \PHPExcel_Reader_Exception
-     * @throws \PHPExcel_Writer_Exception
-     */
-    public static function arrayToExcel($headData , $bodyData , $fileName = null)
-    {
-        $excel = new \PHPExcel();
-        $excel->setActiveSheetIndex(0);
-        /*
-              $columnLength = count($headData);
-                  if($columnLength > 26){
-                      $lastColName = "A".chr($columnLength+64-26);
-                 }else{
-                      $lastColName = chr($columnLength+64);
-
-                  }
-              //报表头标题的输出
-              $excel->getActiveSheet()->mergeCells('A1:'.$lastColName.'1');
-              $excel->getActiveSheet()->setCellValue('A1',$fileName)->getStyle()->getFont()->setBold(true)->getColor()->setARGB(PHPExcel_Style_Color::COLOR_RED);
-              $excel->getActiveSheet()->getCell('A1')->getStyle() ->getAlignment()->setHorizontal(PHPExcel_Style_Alignment::HORIZONTAL_CENTER);
-              $excel->getActiveSheet()->getDefaultColumnDimension()->setAutoSize(true);
-        */
-        // 报表头列名的输出
-        $excel->getActiveSheet()->fromArray($headData , NULL , 'A1');
-        // 具体数据的输出
-        $excel->getActiveSheet()->fromArray($bodyData , NULL , 'A2');
-        $fileStr = $fileName ? $fileName : '未命名';
-        ob_end_clean();
-        ob_start();
-        header('Content-Type: application/vnd.ms-excel');
-        header('Content-Disposition: attachment;filename=' . $fileStr . '.xls');
-        header('Cache-Control: max-age=0');
-        $objWriter = \PHPExcel_IOFactory::createWriter($excel , 'Excel5');  //注意，要加“\”，否则会报错
-        $objWriter->save('php://output');
-    }
-
-    /**
-     * @param  UploadedFile $fileObj
-     * @param string        $savePath
-     * @param bool          $save
-     * @return array|bool
-     * @throws \PHPExcel_Exception
-     * @throws \PHPExcel_Reader_Exception
-     */
-
-    public static function readExcel($fileObj , $savePath = '/' , $save = true)
-    {
-        if ($save) {
-            /*以时间来命名上传的文件*/
-            $str = date('Ymdhis');
-            $file_name = $str . "." . $fileObj->extension;
-            if (!is_dir($savePath)) {
-                mkdir($savePath , 0777 , true);
-            }
-            if (!$fileObj->saveAs($savePath . $file_name)) {
-                return false;
-            }
-            $file = $savePath . $file_name;
-        } else {
-            $file = $fileObj;
-        }
-        $objPHPExcel = PHPExcel_IOFactory::load($file);
-        $sheetData = $objPHPExcel->getActiveSheet()->toArray(null , true , true , true);
-        //删除文件
-        @unlink($file);
-        return $sheetData;
-    }
-
-    /**
-     * @throws Exception
-     */
-    private function initModels()
-    {
         if ($this->all) {
             $this->dataProvider->pagination = false; //不使用分页，导出全部数据
         }
-        $this->allModels = $this->dataProvider->getModels();
-        if (!$this->allModels) {
+        $this->models = $this->dataProvider->getModels();
+        if (!$this->models) {
             throw new Exception('没有数据无法导出');
         }
+        $this->modelsToExcel();
     }
+    /**
+     * 通过模型生成excel文件
+     * @throws Exception
+     */
+    public function modelsToExcel()
+    {
+        if (!$this->models) {
+            throw new Exception('属性models,不能为空');
+        }
+        $this->checkFields();
+        $this->getRelationModels();
+        $this->initFields();
+        $this->initHeaderData();
+        $this->initBodyData();
+        $this->arrayToExcel();
+    }
+
+
+
+    /**
+     * 通过数组生成excel文件
+     * @throws \PhpOffice\PhpSpreadsheet\Exception
+     * @throws \PhpOffice\PhpSpreadsheet\Writer\Exception
+     */
+    public function arrayToExcel()
+    {
+        if (!$this->fileName) {
+            $this->fileName = date('ymdhis');
+        }
+        if (!$this->bodyDataArray) {
+            if (!$this->array) {
+                throw new Exception('属性array不能为空');
+            }
+            $this->bodyDataArray = $this->array;
+        }
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        if ($this->headerDataArray) {
+            $sheet->fromArray($this->headerDataArray, null, 'A1');
+            $sheet->fromArray($this->bodyDataArray, null, 'A2');
+        }else{
+            $sheet->fromArray($this->bodyDataArray, null, 'A1');
+        }
+        if ($this->format == self::XLS) {
+            $writer = new Xls($spreadsheet);
+            ob_start();
+            header('Content-Type: application/vnd.ms-excel');
+            header('Content-Disposition: attachment;filename=' . $this->fileName . '.xls');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        } else {
+            $writer = new Xlsx($spreadsheet);
+            ob_start();
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename=' . $this->fileName . '.xlsx');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+        }
+
+
+    }
+
+
+
+
+
 
     private function getRelationModels()
     {
@@ -152,21 +175,21 @@ class Excel extends Component
                         foreach ($rModel as $k => $v) {
                             if ($k > 0) {
                                 $copyOrderData = clone $item;
-                                $copyOrderData->populateRelation($value , [$v]);
+                                $copyOrderData->populateRelation($value, [$v]);
                                 $this->models[] = $copyOrderData;
                             }
                         }
                     }
                 }
             }
-            unset($item , $rModel , $copyOrderData , $v , $value);
+            unset($item, $rModel, $copyOrderData, $v, $value);
             if ($this->models[0]->primaryKey) {
                 //排序
                 $pk = [];
                 foreach ($this->models as $item) {
                     $pk[] = $item->primaryKey;
                 }
-                array_multisort($this->models , $pk);
+                array_multisort($this->models, $pk);
             }
         }
     }
@@ -174,14 +197,14 @@ class Excel extends Component
     /**
      * @throws Exception
      */
-    private function initHeaderData()
+    protected function initHeaderData()
     {
         $res = [];
         if ($this->fields) {
             $model = $this->models[0];
             foreach ($this->fields as $item) {
                 $label = $model->getAttributeLabel($item);
-                if (!preg_match("/[\x7f-\xff]/" , $label) && $this->relation) {
+                if (!preg_match("/[\x7f-\xff]/", $label) && $this->relation) {
                     if (count($this->relation) > 1) {
                         foreach ($model->getRelatedRecords() as $value) {
                             $label = $value->getAttributeLabel($item);
@@ -216,20 +239,20 @@ class Excel extends Component
     /**
      * @throws Exception
      */
-    private function initBodyData()
+    protected function initBodyData()
     {
         $res = [];
         /** @var ActiveRecord $item */
         foreach ($this->models as $key => $item) {
 
             if ($this->show) {
-                if (!method_exists($item , 'show')) {
+                if (!method_exists($item, 'show')) {
                     throw new Exception(get_class($item) . '中未定义show()方法,不能进行值的转换');
                 }
                 $item->show();
             }
             foreach ($this->fields as $attribute) {
-                $res[$key][$attribute] = $this->getValue($item , $attribute);
+                $res[$key][$attribute] = $this->getValue($item, $attribute);
             }
 
         }
@@ -240,7 +263,7 @@ class Excel extends Component
      * 检查要导出的列是否存在
      * @throws Exception
      */
-    private function checkFields()
+    protected function checkFields()
     {
         if (!$this->fields) {
             return;
@@ -260,7 +283,7 @@ class Excel extends Component
                 }
                 /** @var ActiveRecord $relateModel [$value] */
                 $rModel = $item[$value];
-                if(!$rModel){
+                if (!$rModel) {
                     continue;
                 }
                 if (is_object($rModel)) {
@@ -268,12 +291,12 @@ class Excel extends Component
                 } else {
                     $relationFields = array_keys($item[$value][0]->getAttributes());
                 }
-                $modelFields = array_merge($modelFields , $relationFields);
+                $modelFields = array_merge($modelFields, $relationFields);
                 unset($relationFields);
             }
         }
         $fields = $this->fields;
-        $temp = array_intersect($modelFields , $fields);
+        $temp = array_intersect($modelFields, $fields);
         if (sort($temp) != sort($fields)) {
             throw new Exception('导出的字段在数据中并不存在，请检查');
         }
@@ -282,10 +305,10 @@ class Excel extends Component
     /**
      * 取得相应的列值
      * @param ActiveRecord $model
-     * @param string       $attribute
+     * @param string $attribute
      * @return mixed|null
      */
-    private function getValue($model , $attribute)
+    protected function getValue($model, $attribute)
     {
         if ($model->hasProperty($attribute)) {
             return $model->getAttribute($attribute);
@@ -305,26 +328,16 @@ class Excel extends Component
 
     }
 
-    /**
-     * @throws Exception
-     */
-    public function toExcel()
+
+    private function initFields()
     {
-        if ($this->models) {
-            $this->modelsToExcel();
+        if (!$this->fields) {
+            return;
+        }
+        if (is_string($this->fields)) {
+            $this->fields = explode(",", $this->fields);
         }
     }
 
-    /**
-     * @throws Exception
-     */
-    private function modelsToExcel()
-    {
-        $this->checkFields();
-        $this->getRelationModels();
-        $this->initHeaderData();
-        $this->initBodyData();
-        self::arrayToExcel($this->headerDataArray , $this->bodyDataArray , $this->fileName);
-    }
 
 }
